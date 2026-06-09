@@ -123,47 +123,23 @@ export default function App() {
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === "detections") {
-      const filtered = msg.detections.filter(
-        det => det.confidence >= 0.6
-      );
-
-      setDetections(filtered);
-
-      if (filtered.length > 0) {
-        const top = filtered[0];
-
-        setLastLabel(top.label);
-
-        setHistory(h => {
-          const last = h[h.length - 1];
-
-          if (last?.label === top.label) return h;
-
-          return [
-            ...h.slice(-19),
-            {
-              label: top.label,
-              conf: top.confidence,
-              ts: Date.now(),
-            },
-          ];
-        });
-      } else {
-        setLastLabel(null);
+        setDetections(msg.detections);
+        if (msg.detections.length > 0) {
+          const top = msg.detections[0];
+          setLastLabel(top.label);
+          setHistory(h => {
+            const last = h[h.length - 1];
+            if (last?.label === top.label) return h;
+            return [...h.slice(-19), { label: top.label, conf: top.confidence, ts: Date.now() }];
+          });
+        }
+        fpsRef.current.count++;
+        const now = Date.now();
+        if (now - fpsRef.current.last >= 1000) {
+          setFps(fpsRef.current.count);
+          fpsRef.current = { count: 0, last: now };
+        }
       }
-
-      fpsRef.current.count++;
-
-      const now = Date.now();
-
-      if (now - fpsRef.current.last >= 1000) {
-        setFps(fpsRef.current.count);
-        fpsRef.current = {
-          count: 0,
-          last: now,
-        };
-      }
-    }
     };
     wsRef.current = ws;
   }, []);
@@ -186,8 +162,12 @@ export default function App() {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext("2d").drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        wsRef.current.send(JSON.stringify({ type: "frame", image: dataUrl }));
+        // Kirim sebagai binary blob (lebih ringan dari base64)
+        canvas.toBlob((blob) => {
+          if (blob && wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(blob);
+          }
+        }, "image/jpeg", 0.7);
       }, 100);
     } catch (err) {
       alert("Gagal akses kamera: " + err.message);
