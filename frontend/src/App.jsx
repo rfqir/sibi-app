@@ -283,7 +283,7 @@ export default function App() {
       <div style={s.navbar}>
         <div style={s.brand}>
           <div style={s.brandDot} />
-          <span>SIBI</span>
+          <span>SRS</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: currentTheme.textDim, fontWeight: "500" }}>
