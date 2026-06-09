@@ -91,6 +91,8 @@ export default function App() {
 
   const [cameraOn, setCameraOn] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [cameras, setCameras] = useState([]);
+  const [selectedCamera, setSelectedCamera] = useState("user");
   const [detections, setDetections] = useState([]);
   const [fps, setFps] = useState(0);
   const [lastLabel, setLastLabel] = useState(null);
@@ -147,7 +149,7 @@ export default function App() {
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 }
+        video: { facingMode: selectedCamera, width: 640, height: 480 }
       });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
@@ -168,7 +170,7 @@ export default function App() {
     } catch (err) {
       alert("Gagal akses kamera: " + err.message);
     }
-  }, [connectWS]);
+  }, [connectWS, selectedCamera]);
 
   const stopCamera = useCallback(() => {
     clearInterval(intervalRef.current);
@@ -290,6 +292,21 @@ export default function App() {
       </CornerBox>
 
       <canvas ref={canvasRef} style={{ display: "none" }} />
+
+      {/* Camera selector */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <label style={{ display: "flex", flexDirection: "column", flex: 1, fontSize: 12, color: COLORS.textDim, gap: 4 }}>
+          PILIH KAMERA
+          <select
+            value={selectedCamera}
+            onChange={(e) => setSelectedCamera(e.target.value)}
+            style={{ width: "100%", padding: "10px", borderRadius: 4, border: `1px solid ${COLORS.border}`, background: COLORS.panel, color: COLORS.text, fontFamily: "monospace", fontSize: 13 }}
+          >
+            <option value="user">Depan</option>
+            <option value="environment">Belakang</option>
+          </select>
+        </label>
+      </div>
 
       {/* Buttons */}
       <div style={{ display: "flex", gap: 10 }}>
