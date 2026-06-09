@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-const WS_URL = "ws://localhost:8000/ws";
+const WS_URL = "wss://zinklorin-backend-sibi.hf.space/ws";
 const COLORS = {
   bg: "#0a0e1a",
   panel: "#0d1526",
@@ -162,13 +162,9 @@ export default function App() {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext("2d").drawImage(video, 0, 0);
-        // Kirim sebagai binary blob (lebih ringan dari base64)
-        canvas.toBlob((blob) => {
-          if (blob && wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(blob);
-          }
-        }, "image/jpeg", 0.7);
-      }, 100);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        wsRef.current.send(JSON.stringify({ type: "frame", image: dataUrl }));
+      }, 500);
     } catch (err) {
       alert("Gagal akses kamera: " + err.message);
     }
