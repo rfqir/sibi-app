@@ -383,8 +383,8 @@ export default function App() {
         <div style={{ ...s.card, ...s.rightColumn, display: "flex", flexDirection: "column", gap: "20px", height: isDesktop ? "100%" : "auto", minHeight: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
             <div>
-              <h2 style={{ ...s.cardTitle, margin: 0, color: currentTheme.text, fontSize: "16px", textTransform: "none", letterSpacing: "normal" }}>SIBI Analytics Module</h2>
-              <p style={{ fontSize: "13px", color: currentTheme.textDim, margin: "4px 0 0 0", fontWeight: "500" }}>Real-time Indonesian Sign Language Recognition</p>
+              <h2 style={{ ...s.cardTitle, margin: 0, color: currentTheme.text, fontSize: "16px", textTransform: "none", letterSpacing: "normal" }}>SRS</h2>
+              <p style={{ fontSize: "13px", color: currentTheme.textDim, margin: "4px 0 0 0", fontWeight: "500" }}>SIBI Recognition System</p>
             </div>
             
             <button style={s.btnAction(cameraOn)} onClick={cameraOn ? stopCamera : startCamera}>
