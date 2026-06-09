@@ -1,86 +1,35 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 const WS_URL = "wss://zinklorin-backend-sibi.hf.space/ws";
-const COLORS = {
-  bg: "#0a0e1a",
-  panel: "#0d1526",
-  border: "#1a2744",
-  cyan: "#00f5ff",
-  cyanDim: "#00b8cc",
-  green: "#00ff88",
-  yellow: "#ffd700",
-  red: "#ff4466",
-  text: "#c8d8f0",
-  textDim: "#4a6080",
+
+const THEMES = {
+  light: {
+    bg: "#f8fafc",
+    panel: "#ffffff",
+    border: "#e2e8f0",
+    text: "#0f172a",
+    textDim: "#64748b",
+    primary: "#1d4ed8",
+    primaryLight: "#eff6ff",
+    green: "#10b981",
+    red: "#ef4444",
+    cardShadow: "0 1px 2px 0 rgba(0, 0, 0, 0.03)",
+    inputBg: "#ffffff",
+  },
+  dark: {
+    bg: "#0f172a",
+    panel: "#1e293b",
+    border: "#334155",
+    text: "#f1f5f9",
+    textDim: "#94a3b8",
+    primary: "#3b82f6",
+    primaryLight: "rgba(59, 130, 246, 0.1)",
+    green: "#10b981",
+    red: "#f87171",
+    cardShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -2px rgba(0, 0, 0, 0.1)",
+    inputBg: "#111827",
+  }
 };
-
-function CornerBox({ children, style }) {
-  const corner = { position: "absolute", width: 14, height: 14 };
-  const line = `2px solid ${COLORS.cyan}`;
-  return (
-    <div style={{ position: "relative", ...style }}>
-      <div style={{ ...corner, top: 0, left: 0, borderTop: line, borderLeft: line }} />
-      <div style={{ ...corner, top: 0, right: 0, borderTop: line, borderRight: line }} />
-      <div style={{ ...corner, bottom: 0, left: 0, borderBottom: line, borderLeft: line }} />
-      <div style={{ ...corner, bottom: 0, right: 0, borderBottom: line, borderRight: line }} />
-      {children}
-    </div>
-  );
-}
-
-function BBox({ det, videoW, videoH }) {
-  const { bbox, label, confidence } = det;
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: `${bbox.x * 100}%`,
-        top: `${bbox.y * 100}%`,
-        width: `${bbox.w * 100}%`,
-        height: `${bbox.h * 100}%`,
-        border: `2px solid ${COLORS.cyan}`,
-        boxShadow: `0 0 8px ${COLORS.cyan}88`,
-        pointerEvents: "none",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: -24,
-          left: -2,
-          background: COLORS.cyan,
-          color: COLORS.bg,
-          fontSize: 12,
-          fontWeight: 700,
-          fontFamily: "monospace",
-          padding: "2px 8px",
-          whiteSpace: "nowrap",
-          letterSpacing: 1,
-        }}
-      >
-        {label} {(confidence * 100).toFixed(0)}%
-      </div>
-    </div>
-  );
-}
-
-function StatusDot({ connected }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <span
-        style={{
-          width: 8, height: 8, borderRadius: "50%",
-          background: connected ? COLORS.green : COLORS.red,
-          boxShadow: `0 0 6px ${connected ? COLORS.green : COLORS.red}`,
-          display: "inline-block",
-        }}
-      />
-      <span style={{ fontFamily: "monospace", fontSize: 12, color: COLORS.textDim, letterSpacing: 1 }}>
-        {connected ? "CONNECTED" : "DISCONNECTED"}
-      </span>
-    </span>
-  );
-}
 
 export default function App() {
   const videoRef = useRef(null);
@@ -89,9 +38,15 @@ export default function App() {
   const intervalRef = useRef(null);
   const streamRef = useRef(null);
 
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return false;
+  });
+
   const [cameraOn, setCameraOn] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState("user");
   const [detections, setDetections] = useState([]);
   const [fps, setFps] = useState(0);
@@ -99,13 +54,23 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installed, setInstalled] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(typeof window !== "undefined" ? window.innerWidth > 900 : false);
   const fpsRef = useRef({ count: 0, last: Date.now() });
 
+  const currentTheme = darkMode ? THEMES.dark : THEMES.light;
+
   useEffect(() => {
-    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
-    window.addEventListener("beforeinstallprompt", handler);
+    const handleResize = () => setIsDesktop(window.innerWidth > 900);
+    window.addEventListener("resize", handleResize);
+    
+    const installHandler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener("beforeinstallprompt", installHandler);
     window.addEventListener("appinstalled", () => setInstalled(true));
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("beforeinstallprompt", installHandler);
+    };
   }, []);
 
   const handleInstall = async () => {
@@ -132,7 +97,7 @@ export default function App() {
           setHistory(h => {
             const last = h[h.length - 1];
             if (last?.label === top.label) return h;
-            return [...h.slice(-19), { label: top.label, conf: top.confidence, ts: Date.now() }];
+            return [...h.slice(-7), { label: top.label, conf: top.confidence, ts: Date.now() }];
           });
         }
         fpsRef.current.count++;
@@ -187,220 +152,307 @@ export default function App() {
 
   const s = {
     app: {
-      minHeight: "100vh", background: COLORS.bg, color: COLORS.text,
-      fontFamily: "'Courier New', monospace", padding: "16px",
-      display: "flex", flexDirection: "column", gap: 16, maxWidth: 480,
+      height: isDesktop ? "100vh" : "auto",
+      maxHeight: isDesktop ? "100vh" : "none",
+      background: currentTheme.bg,
+      color: currentTheme.text,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif',
+      padding: isDesktop ? "24px 40px" : "16px 12px",
+      display: "flex",
+      flexDirection: "column",
+      gap: isDesktop ? "16px" : "12px",
+      overflow: isDesktop ? "hidden" : "auto",
+      boxSizing: "border-box",
+    },
+    navbar: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      borderBottom: `1px solid ${currentTheme.border}`,
+      paddingBottom: "12px",
+      flexShrink: 0,
+      width: isDesktop ? "70%" : "100%",
       margin: "0 auto",
     },
-    header: {
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      borderBottom: `1px solid ${COLORS.border}`, paddingBottom: 12,
+    brand: { display: "flex", alignItems: "center", gap: "10px", fontSize: "18px", fontWeight: "700", color: currentTheme.primary, letterSpacing: "-0.5px" },
+    brandDot: { width: "10px", height: "10px", borderRadius: "50%", background: currentTheme.primary },
+    
+    layout: {
+      display: "grid",
+      gridTemplateColumns: isDesktop ? "280px 1fr" : "1fr",
+      gap: isDesktop ? "20px" : "16px",
+      width: isDesktop ? "70%" : "100%",
+      margin: "0 auto",
+      flexGrow: 1,
+      minHeight: 0,
     },
-    title: {
-      fontSize: 20, fontWeight: 700, letterSpacing: 3,
-      color: COLORS.cyan, textShadow: `0 0 12px ${COLORS.cyan}88`,
+    
+    leftColumn: {
+      display: "flex",
+      flexDirection: "column", 
+      gap: isDesktop ? "16px" : "12px",
+      minHeight: 0,
+      order: isDesktop ? 1 : 2
     },
-    videoWrap: {
-      position: "relative", background: "#000", borderRadius: 4,
-      overflow: "hidden", aspectRatio: "4/3",
-      border: `1px solid ${COLORS.border}`,
+    rightColumn: {
+      order: isDesktop ? 2 : 1
     },
-    video: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
-    placeholder: {
-      position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", gap: 12, color: COLORS.textDim,
+    
+    card: {
+      background: currentTheme.panel,
+      border: `1px solid ${currentTheme.border}`,
+      borderRadius: "12px",
+      boxShadow: currentTheme.cardShadow,
+      padding: "20px",
+      boxSizing: "border-box",
     },
-    btn: (active) => ({
-      flex: 1, padding: "12px 0", border: "none", borderRadius: 4,
-      fontFamily: "monospace", fontSize: 14, fontWeight: 700, letterSpacing: 2,
-      cursor: "pointer", transition: "all 0.15s",
-      background: active
-        ? `linear-gradient(135deg, #ff1a3a, #cc0022)`
-        : `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.cyanDim})`,
-      color: active ? "#fff" : COLORS.bg,
-      boxShadow: active
-        ? `0 0 16px #ff1a3a66`
-        : `0 0 16px ${COLORS.cyan}44`,
+    // MODIFIKASI: Ukuran disesuaikan (compact dan proporsional dengan layout professional business)
+    statsCardWrapper: {
+      background: currentTheme.panel,
+      border: `1px solid ${currentTheme.border}`,
+      borderRadius: "12px",
+      boxShadow: currentTheme.cardShadow,
+      padding: "14px 16px", // Dibuat lebih tipis namun pas dengan grid content
+      boxSizing: "border-box",
+    },
+    cardTitle: {
+      fontSize: "12px",
+      fontWeight: "600",
+      color: currentTheme.textDim,
+      margin: "0 0 12px 0", // Mengurangi jarak bawah judul sedikit agar tidak terlalu kosong
+      letterSpacing: "1px",
+      textTransform: "uppercase"
+    },
+    videoArea: {
+      position: "relative",
+      width: "100%",
+      aspectRatio: "16/9",
+      background: "#000",
+      borderRadius: "8px",
+      overflow: "hidden",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      border: `1px solid ${currentTheme.border}`
+    },
+    btnAction: (isOn) => ({
+      padding: "10px 20px", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "600", cursor: "pointer", 
+      background: isOn ? currentTheme.red : currentTheme.primary, color: "#ffffff", display: "flex", alignItems: "center", gap: "8px", transition: "background 0.2s"
     }),
-    labelBig: {
-      textAlign: "center", padding: "16px 0",
-      fontSize: 72, fontWeight: 900, lineHeight: 1,
-      color: COLORS.cyan, textShadow: `0 0 30px ${COLORS.cyan}`,
-      letterSpacing: 8,
+    btnInstall: {
+      width: "100%", padding: "10px", border: `1px solid ${currentTheme.border}`, borderRadius: "6px", background: currentTheme.inputBg,
+      color: currentTheme.primary, fontSize: "13px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginTop: "12px"
     },
-    panel: {
-      background: COLORS.panel, border: `1px solid ${COLORS.border}`,
-      borderRadius: 4, padding: "12px 16px",
+    toggleMode: {
+      background: "transparent", border: `1px solid ${currentTheme.border}`, borderRadius: "6px", cursor: "pointer", 
+      color: currentTheme.text, display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px"
     },
-    panelTitle: {
-      fontSize: 11, letterSpacing: 3, color: COLORS.textDim,
-      marginBottom: 8, textTransform: "uppercase",
+    statsGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" },
+    statCard: {
+      padding: "8px 4px", // Menggunakan padding proporsional agar ramping namun tulisan tidak menempel batas luar
+      borderRadius: "8px", 
+      background: darkMode ? "#293548" : "#f1f5f9", 
+      border: `1px solid ${currentTheme.border}`, 
+      textAlign: "center"
     },
-    historyRow: {
-      display: "flex", gap: 6, flexWrap: "wrap",
+    statVal: { display: "block", fontSize: "16px", fontWeight: "700", color: currentTheme.text, marginTop: "2px" },
+    
+    bigLabelBox: {
+      textAlign: "center", padding: isDesktop ? "16px 0" : "12px 0", background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.01)", borderRadius: "8px", border: `1px dashed ${currentTheme.border}`,
+      flexGrow: 0, minHeight: "60px", display: "flex", alignItems: "center", justifyContent: "center"
     },
-    historyItem: (i) => ({
-      padding: "3px 10px", borderRadius: 2,
-      background: i === history.length - 1 ? COLORS.cyan : COLORS.border,
-      color: i === history.length - 1 ? COLORS.bg : COLORS.text,
-      fontSize: 13, fontWeight: 700, letterSpacing: 2,
-      transition: "all 0.2s",
-    }),
-    statsRow: {
-      display: "flex", gap: 16, fontSize: 12, color: COLORS.textDim,
-    },
-    stat: {
-      display: "flex", flexDirection: "column", gap: 2,
-    },
-    statVal: { color: COLORS.cyan, fontSize: 18, fontWeight: 700 },
+    labelText: { fontSize: isDesktop ? "32px" : "28px", fontWeight: "700", color: currentTheme.primary, letterSpacing: "-0.5px" },
+    inactiveText: { fontSize: "14px", fontWeight: "500", color: currentTheme.textDim },
+
+    footer: {
+      textAlign: "center",
+      fontSize: "12px",
+      color: currentTheme.textDim,
+      flexShrink: 0,
+      borderTop: `1px solid ${currentTheme.border}`,
+      paddingTop: "12px",
+      width: isDesktop ? "70%" : "100%",
+      margin: "0 auto",
+      fontWeight: "500"
+    }
   };
 
   return (
     <div style={s.app}>
-      {/* Header */}
-      <div style={s.header}>
-        <span style={s.title}>SIBI.AI</span>
-        <StatusDot connected={connected} />
+      {/* Top Navbar */}
+      <div style={s.navbar}>
+        <div style={s.brand}>
+          <div style={s.brandDot} />
+          <span>SIBI</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: currentTheme.textDim, fontWeight: "500" }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: connected ? currentTheme.green : currentTheme.red, display: "inline-block" }} />
+            {isDesktop && (connected ? "System Connected" : "System Disconnected")}
+          </div>
+          
+          <button onClick={() => setDarkMode(!darkMode)} style={s.toggleMode} aria-label="Toggle Theme">
+            {darkMode ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Video feed */}
-      <CornerBox>
-        <div style={s.videoWrap}>
-          <video ref={videoRef} style={s.video} muted playsInline />
-          {!cameraOn && (
-            <div style={s.placeholder}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={COLORS.textDim} strokeWidth="1.5">
-                <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
-              </svg>
-              <span style={{ fontSize: 12, letterSpacing: 2 }}>CAMERA STANDBY</span>
+      {/* Grid Layout Container */}
+      <div style={s.layout}>
+        
+        {/* KOLOM KIRI */}
+        <div style={s.leftColumn}>
+          
+          {/* CARD KAMERA */}
+          <div style={s.card}>
+            <h2 style={s.cardTitle}>Camera Selection</h2>
+            <select
+              value={selectedCamera}
+              onChange={(e) => setSelectedCamera(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: `1px solid ${currentTheme.border}`, background: currentTheme.inputBg, color: currentTheme.text, fontSize: "14px", outline: "none", cursor: "pointer" }}
+            >
+              <option value="user">Front Camera (Primary)</option>
+              <option value="environment">Back Camera (Secondary)</option>
+            </select>
+
+            {/* Tombol Install PWA */}
+            {installPrompt && !installed && (
+              <button onClick={handleInstall} style={s.btnInstall}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Install Application
+              </button>
+            )}
+          </div>
+
+          {/* CARD STATISTICS (Dipendekkan secara optimal & presisi) */}
+          <div style={s.statsCardWrapper}>
+            <h2 style={s.cardTitle}>Real-time Statistics</h2>
+            <div style={s.statsGrid}>
+              <div style={s.statCard}>
+                <span style={{ fontSize: "10px", color: currentTheme.textDim, fontWeight: "600", textTransform: "uppercase" }}>Objects</span>
+                <span style={s.statVal}>{detections.length}</span>
+              </div>
+              <div style={s.statCard}>
+                <span style={{ fontSize: "10px", color: currentTheme.textDim, fontWeight: "600", textTransform: "uppercase" }}>FPS</span>
+                <span style={s.statVal}>{fps}</span>
+              </div>
+              <div style={s.statCard}>
+                <span style={{ fontSize: "10px", color: currentTheme.textDim, fontWeight: "600", textTransform: "uppercase" }}>Confidence</span>
+                <span style={s.statVal}>
+                  {detections[0] ? `${(detections[0].confidence * 100).toFixed(0)}%` : "—"}
+                </span>
+              </div>
             </div>
-          )}
-          {cameraOn && detections.map((det, i) => (
-            <BBox key={i} det={det} />
-          ))}
-          {cameraOn && (
-            <div style={{
-              position: "absolute", top: 8, right: 8,
-              background: "#00000088", padding: "3px 8px",
-              fontSize: 11, fontFamily: "monospace", color: COLORS.green,
-              letterSpacing: 1,
-            }}>
-              ● LIVE {fps}fps
-            </div>
-          )}
+          </div>
+
+          {/* CARD DETECTION HISTORY */}
+          <div style={s.card}>
+            <h2 style={s.cardTitle}>Detection History</h2>
+            {history.length > 0 ? (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {history.map((h, i) => (
+                  <span 
+                    key={h.ts} 
+                    style={{ 
+                      padding: "6px 12px", 
+                      borderRadius: "6px", 
+                      background: i === history.length - 1 ? currentTheme.primaryLight : (darkMode ? "#334155" : "#f1f5f9"), 
+                      color: i === history.length - 1 ? currentTheme.primary : currentTheme.text, 
+                      fontSize: "12px", 
+                      fontWeight: "600" 
+                    }}
+                  >
+                    {h.label}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: "12px", color: currentTheme.textDim, fontStyle: "italic", fontWeight: "500" }}>
+                Waiting for detections...
+              </div>
+            )}
+          </div>
+
         </div>
-      </CornerBox>
+
+        {/* KOLOM KANAN */}
+        <div style={{ ...s.card, ...s.rightColumn, display: "flex", flexDirection: "column", gap: "20px", height: isDesktop ? "100%" : "auto", minHeight: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+            <div>
+              <h2 style={{ ...s.cardTitle, margin: 0, color: currentTheme.text, fontSize: "16px", textTransform: "none", letterSpacing: "normal" }}>SIBI Analytics Module</h2>
+              <p style={{ fontSize: "13px", color: currentTheme.textDim, margin: "4px 0 0 0", fontWeight: "500" }}>Real-time Indonesian Sign Language Recognition</p>
+            </div>
+            
+            <button style={s.btnAction(cameraOn)} onClick={cameraOn ? stopCamera : startCamera}>
+              {cameraOn ? (
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              )}
+              {cameraOn ? "Stop Stream" : "Start Camera"}
+            </button>
+          </div>
+
+          {/* Screen Workspace Monitor */}
+          <div style={s.videoArea}>
+            <video ref={videoRef} style={{ width: "100%", height: "100%", objectFit: "cover", display: cameraOn ? "block" : "none" }} muted playsInline />
+            
+            {!cameraOn && (
+              <div style={{ textAlign: "center", padding: "0 16px" }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={currentTheme.textDim} strokeWidth="1.5" style={{ marginBottom: "12px" }}>
+                  <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+                </svg>
+                <div style={{ fontSize: "13px", fontWeight: "600", color: currentTheme.textDim, textTransform: "uppercase", letterSpacing: "1px" }}>Camera Standby</div>
+              </div>
+            )}
+
+            {/* Bounding Box */}
+            {cameraOn && detections.map((det, i) => (
+              <div
+                key={i}
+                style={{
+                  position: "absolute",
+                  left: `${det.bbox.x * 100}%`,
+                  top: `${det.bbox.y * 100}%`,
+                  width: `${det.bbox.w * 100}%`,
+                  height: `${det.bbox.h * 100}%`,
+                  border: `2px solid ${currentTheme.primary}`,
+                  borderRadius: "4px",
+                  pointerEvents: "none"
+                }}
+              >
+                <span style={{ position: "absolute", top: "-22px", left: "-2px", background: currentTheme.primary, color: "#fff", fontSize: "10px", padding: "2px 6px", fontWeight: "600", borderRadius: "4px" }}>
+                  {det.label}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Big Output Teks */}
+          <div style={s.bigLabelBox}>
+            {lastLabel ? (
+              <div style={s.labelText}>
+                {lastLabel}
+              </div>
+            ) : (
+              <div style={s.inactiveText}>
+                {cameraOn ? "Scanning Stream..." : "Engine Inactive"}
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
 
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
-      {/* Camera selector */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <label style={{ display: "flex", flexDirection: "column", flex: 1, fontSize: 12, color: COLORS.textDim, gap: 4 }}>
-          PILIH KAMERA
-          <select
-            value={selectedCamera}
-            onChange={(e) => setSelectedCamera(e.target.value)}
-            style={{ width: "100%", padding: "10px", borderRadius: 4, border: `1px solid ${COLORS.border}`, background: COLORS.panel, color: COLORS.text, fontFamily: "monospace", fontSize: 13 }}
-          >
-            <option value="user">Depan</option>
-            <option value="environment">Belakang</option>
-          </select>
-        </label>
-      </div>
-
-      {/* Buttons */}
-      <div style={{ display: "flex", gap: 10 }}>
-        {!cameraOn ? (
-          <button style={s.btn(false)} onClick={startCamera}>▶ START CAMERA</button>
-        ) : (
-          <button style={s.btn(true)} onClick={stopCamera}>■ STOP CAMERA</button>
-        )}
-      </div>
-
-      {/* Install PWA Button */}
-      {installPrompt && !installed && (
-        <button
-          onClick={handleInstall}
-          style={{
-            width: "100%", padding: "10px 0", border: `1px solid ${COLORS.cyan}`,
-            borderRadius: 4, background: "transparent",
-            color: COLORS.cyan, fontFamily: "monospace", fontSize: 13,
-            fontWeight: 700, letterSpacing: 2, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          }}
-        >
-          ⬇ INSTALL APP
-        </button>
-      )}
-      {installed && (
-        <div style={{ textAlign: "center", fontSize: 12, color: COLORS.green, letterSpacing: 2, padding: "6px 0" }}>
-          ✓ APP INSTALLED
-        </div>
-      )}
-
-      {/* Big label */}
-      {lastLabel && (
-        <div style={s.labelBig}>{lastLabel}</div>
-      )}
-      {!lastLabel && cameraOn && (
-        <div style={{ ...s.labelBig, fontSize: 14, color: COLORS.textDim, letterSpacing: 3 }}>
-          SCANNING...
-        </div>
-      )}
-
-      {/* Stats */}
-      <div style={s.panel}>
-        <div style={s.panelTitle}>Statistics</div>
-        <div style={s.statsRow}>
-          <div style={s.stat}>
-            <span style={{ fontSize: 11, letterSpacing: 1 }}>DETECTIONS</span>
-            <span style={s.statVal}>{detections.length}</span>
-          </div>
-          <div style={s.stat}>
-            <span style={{ fontSize: 11, letterSpacing: 1 }}>FPS</span>
-            <span style={s.statVal}>{fps}</span>
-          </div>
-          <div style={s.stat}>
-            <span style={{ fontSize: 11, letterSpacing: 1 }}>CONFIDENCE</span>
-            <span style={s.statVal}>
-              {detections[0] ? `${(detections[0].confidence * 100).toFixed(0)}%` : "—"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* History */}
-      {history.length > 0 && (
-        <div style={s.panel}>
-          <div style={s.panelTitle}>Detection History</div>
-          <div style={s.historyRow}>
-            {history.map((h, i) => (
-              <span key={h.ts} style={s.historyItem(i)}>{h.label}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Detection list */}
-      {detections.length > 0 && (
-        <div style={s.panel}>
-          <div style={s.panelTitle}>Active Detections</div>
-          {detections.map((det, i) => (
-            <div key={i} style={{
-              display: "flex", justifyContent: "space-between",
-              padding: "4px 0", borderBottom: i < detections.length - 1 ? `1px solid ${COLORS.border}` : "none",
-            }}>
-              <span style={{ fontWeight: 700, color: COLORS.cyan, letterSpacing: 2 }}>{det.label}</span>
-              <span style={{ color: COLORS.textDim, fontSize: 12 }}>
-                {(det.confidence * 100).toFixed(1)}%
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ textAlign: "center", fontSize: 10, color: COLORS.textDim, letterSpacing: 2, paddingTop: 8 }}>
-        SIBI DETECTION SYSTEM v1.0
+      {/* Footer */}
+      <div style={s.footer}>
+        SIBI AI System v1.1 • Enterprise Solution 2026
       </div>
     </div>
   );
