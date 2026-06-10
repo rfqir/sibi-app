@@ -1,7 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-const WS_URL = "wss://zinklorin-backend-sibi.hf.space/ws";
-
+const WS_URL = "ws://localhost:8000/ws";
+const gestureImages = import.meta.glob(
+  "./assets/img/*.{jpg,jpeg,png}",
+  {
+    eager: true,
+    import: "default",
+  }
+);
 const THEMES = {
   light: {
     bg: "#f8fafc",
@@ -37,13 +43,7 @@ export default function App() {
   const wsRef = useRef(null);
   const intervalRef = useRef(null);
   const streamRef = useRef(null);
-
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-    return false;
-  });
+  
 
   const [cameraOn, setCameraOn] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -55,8 +55,29 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installed, setInstalled] = useState(false);
   const [isDesktop, setIsDesktop] = useState(typeof window !== "undefined" ? window.innerWidth > 900 : false);
+  const [practiceWord, setPracticeWord] = useState("");
+  const [practiceInput, setPracticeInput] = useState("");
+  const [practiceActive, setPracticeActive] = useState(false);
+  const [practiceProgress, setPracticeProgress] = useState(0);
+  const [expectedLetter, setExpectedLetter] = useState(null);
+  const [practiceCompleted, setPracticeCompleted] = useState(false);
   const fpsRef = useRef({ count: 0, last: Date.now() });
+  const getGestureImage = (letter) => {
+    if (!letter) return null;
 
+    const match = Object.entries(gestureImages).find(([path]) =>
+      path.toLowerCase().endsWith(`/${letter.toLowerCase()}.jpg`)
+    );
+
+    return match?.[1] ?? null;
+  };
+  const gestureImage = getGestureImage(expectedLetter);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return false;
+  });
   const currentTheme = darkMode ? THEMES.dark : THEMES.light;
 
   useEffect(() => {
@@ -88,9 +109,27 @@ export default function App() {
     ws.onclose = () => { setConnected(false); setTimeout(connectWS, 2000); };
     ws.onerror = () => ws.close();
     ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
-      if (msg.type === "detections") {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === "practice_started") {
+      setPracticeWord(msg.word);
+      setExpectedLetter(msg.expected);
+      setPracticeProgress(0);
+      setPracticeActive(true);
+    }
+
+    if (msg.type === "detections") {
         setDetections(msg.detections);
+        if (msg.practice) {
+          setPracticeProgress(msg.practice.progress ?? 0);
+
+          if (msg.practice.completed) {
+            setPracticeCompleted(true);
+            setExpectedLetter(null);
+          } else if (msg.practice.expected) {
+            setExpectedLetter(msg.practice.expected);
+          }
+        }
         if (msg.detections.length > 0) {
           const top = msg.detections[0];
           setLastLabel(top.label);
@@ -110,7 +149,18 @@ export default function App() {
     };
     wsRef.current = ws;
   }, []);
+  const startPractice = () => {
+  if (!practiceInput.trim()) return;
 
+  setPracticeCompleted(false);
+
+  wsRef.current?.send(
+    JSON.stringify({
+      type: "start_practice",
+      word: practiceInput.toUpperCase(),
+    })
+  );
+};
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -146,6 +196,11 @@ export default function App() {
     setConnected(false);
     setDetections([]);
     setLastLabel(null);
+    setPracticeActive(false);
+    setPracticeWord("");
+    setExpectedLetter(null);
+    setPracticeProgress(0);
+    setPracticeCompleted(false);
   }, []);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
@@ -283,7 +338,7 @@ export default function App() {
       <div style={s.navbar}>
         <div style={s.brand}>
           <div style={s.brandDot} />
-          <span>SRS</span>
+          <span>SIBI</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: currentTheme.textDim, fontWeight: "500" }}>
@@ -327,7 +382,156 @@ export default function App() {
               </button>
             )}
           </div>
+            <div style={s.card}>
+              <h2 style={s.cardTitle}>Practice Mode</h2>
 
+              <input
+                value={practiceInput}
+                onChange={(e) => setPracticeInput(e.target.value)}
+                placeholder="Masukkan kata, contoh: TARI"
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: `1px solid ${currentTheme.border}`,
+                  background: currentTheme.inputBg,
+                  color: currentTheme.text,
+                  boxSizing: "border-box",
+                  marginBottom: "10px"
+                }}
+              />
+
+              <button
+                onClick={startPractice}
+                disabled={!connected}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: currentTheme.primary,
+                  color: "#fff",
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                Start Practice
+              </button>
+
+              {practiceActive && (
+                <div style={{ marginTop: "16px" }}>
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: currentTheme.textDim,
+                      marginBottom: "8px"
+                    }}
+                  >
+                    TARGET WORD
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: "28px",
+                      fontWeight: 700,
+                      letterSpacing: "4px",
+                      marginBottom: "12px"
+                    }}
+                  >
+                    {practiceWord}
+                  </div>
+                    
+                  {!practiceCompleted && (
+                    <>
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: currentTheme.textDim
+                        }}
+                      >
+                        Expected Letter
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: "42px",
+                          fontWeight: 700,
+                          color: currentTheme.primary,
+                          marginBottom: "12px"
+                        }}
+                      >
+                        {expectedLetter}
+                      </div>
+
+                      {gestureImage && (
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "center",
+                            marginTop: "8px"
+                          }}
+                        >
+                          <img
+                            src={gestureImage}
+                            alt={`Gesture ${expectedLetter}`}
+                            style={{
+                              width: "180px",
+                              maxWidth: "100%",
+                              borderRadius: "12px",
+                              border: `1px solid ${currentTheme.border}`,
+                              background: "#fff",
+                              objectFit: "contain"
+                            }}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {practiceCompleted && (
+                    <div
+                      style={{
+                        marginTop: "10px",
+                        color: currentTheme.green,
+                        fontWeight: 700,
+                        fontSize: "18px"
+                      }}
+                    >
+                      ✓ COMPLETED
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      height: "8px",
+                      background: darkMode ? "#334155" : "#e2e8f0",
+                      borderRadius: "999px",
+                      overflow: "hidden"
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${practiceProgress}%`,
+                        height: "100%",
+                        background: currentTheme.primary,
+                        transition: "0.3s"
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "6px",
+                      fontSize: "12px",
+                      color: currentTheme.textDim
+                    }}
+                  >
+                    {practiceProgress.toFixed(0)}%
+                  </div>
+                </div>
+              )}
+            </div>
           {/* CARD STATISTICS (Dipendekkan secara optimal & presisi) */}
           <div style={s.statsCardWrapper}>
             <h2 style={s.cardTitle}>Real-time Statistics</h2>
@@ -383,8 +587,8 @@ export default function App() {
         <div style={{ ...s.card, ...s.rightColumn, display: "flex", flexDirection: "column", gap: "20px", height: isDesktop ? "100%" : "auto", minHeight: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
             <div>
-              <h2 style={{ ...s.cardTitle, margin: 0, color: currentTheme.text, fontSize: "16px", textTransform: "none", letterSpacing: "normal" }}>SRS</h2>
-              <p style={{ fontSize: "13px", color: currentTheme.textDim, margin: "4px 0 0 0", fontWeight: "500" }}>SIBI Recognition System</p>
+              <h2 style={{ ...s.cardTitle, margin: 0, color: currentTheme.text, fontSize: "16px", textTransform: "none", letterSpacing: "normal" }}>SIBI Analytics Module</h2>
+              <p style={{ fontSize: "13px", color: currentTheme.textDim, margin: "4px 0 0 0", fontWeight: "500" }}>Real-time Indonesian Sign Language Recognition</p>
             </div>
             
             <button style={s.btnAction(cameraOn)} onClick={cameraOn ? stopCamera : startCamera}>
