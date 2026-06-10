@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-const WS_URL = "ws://localhost:8000/ws";
+const WS_URL = "wss://zinklorin-backend-sibi.hf.space/ws";
 const gestureImages = import.meta.glob(
   "./assets/img/*.{jpg,jpeg,png}",
   {
